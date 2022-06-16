@@ -199,12 +199,6 @@ class AWG7k(Base, PulserInterface):
                 constraints.sample_rate.step = 10.0e6
                 constraints.sample_rate.default = 8.0e9
 
-        elif self.model == 'AWG7052':
-            constraints.sample_rate.min = 10.0e6
-            constraints.sample_rate.max = 5.0e9
-            constraints.sample_rate.step = 10.0e6 # <=== not sure
-            constraints.sample_rate.default = 5.0e9
-
         if '02' in self.installed_options or self._has_interleave():
             constraints.a_ch_amplitude.max = 1.0
             constraints.a_ch_amplitude.step = 0.001
@@ -228,37 +222,20 @@ class AWG7k(Base, PulserInterface):
         constraints.d_ch_high.max = 1.4
         constraints.d_ch_high.step = 0.01
         constraints.d_ch_high.default = 1.4
-        
-        if self.model == 'AWG7052':
-            constraints.waveform_length.min = 960
-            constraints.waveform_length.step = 64
-            constraints.waveform_length.default = 960
-        else:
-            if self.get_interleave():
-                constraints.waveform_length.min = 1920
-                constraints.waveform_length.step = 8
-            else:
-                constraints.waveform_length.min = 960
-                constraints.waveform_length.step = 4
-            constraints.waveform_length.default = 1920
 
+        constraints.waveform_length.min = 1
+        constraints.waveform_length.step = 4
+        constraints.waveform_length.default = 80
         if '01' in self.installed_options:
             constraints.waveform_length.max = 64800000
         else:
             constraints.waveform_length.max = 32400000
 
-        if self.model == 'AWG7052':
-            constraints.waveform_num.min = 1
-            constraints.waveform_num.max = 16000
-            constraints.waveform_num.step = 1
-            constraints.waveform_num.default = 1
-        else:
-            constraints.waveform_num.min = 1
-            constraints.waveform_num.max = 32000
-            constraints.waveform_num.step = 1
-            constraints.waveform_num.default = 1
+        constraints.waveform_num.min = 1
+        constraints.waveform_num.max = 32000
+        constraints.waveform_num.step = 1
+        constraints.waveform_num.default = 1
 
-        # there doesn't seem to be something like number of sequences according to the technical reference
         constraints.sequence_num.min = 1
         constraints.sequence_num.max = 16000
         constraints.sequence_num.step = 1
@@ -271,7 +248,7 @@ class AWG7k(Base, PulserInterface):
 
         # If sequencer mode is available then these should be specified
         constraints.repetitions.min = 0
-        constraints.repetitions.max = 65536
+        constraints.repetitions.max = 65539
         constraints.repetitions.step = 1
         constraints.repetitions.default = 0
 
@@ -279,16 +256,10 @@ class AWG7k(Base, PulserInterface):
         constraints.event_triggers = ['ON']
         constraints.flags = list()
 
-        if self.model == 'AWG7052':
-            constraints.sequence_steps.min = 0
-            constraints.sequence_steps.max = 4000
-            constraints.sequence_steps.step = 1
-            constraints.sequence_steps.default = 0
-        else:
-            constraints.sequence_steps.min = 0
-            constraints.sequence_steps.max = 8000
-            constraints.sequence_steps.step = 1
-            constraints.sequence_steps.default = 0
+        constraints.sequence_steps.min = 0
+        constraints.sequence_steps.max = 8000
+        constraints.sequence_steps.step = 1
+        constraints.sequence_steps.default = 0
 
         # the name a_ch<num> and d_ch<num> are generic names, which describe UNAMBIGUOUSLY the
         # channels. Here all possible channel configurations are stated, where only the generic
@@ -385,13 +356,13 @@ class AWG7k(Base, PulserInterface):
         if not channels_to_set.issubset(analog_channels):
             self.log.error('Unable to load all waveforms into channels.\n'
                            'One or more channels to set are not active.')
-            return self.get_loaded_assets()[0]
+            return self.get_loaded_assets()
 
         # Check if all waveforms to load are present on device memory
         if not set(load_dict.values()).issubset(self.get_waveform_names()):
             self.log.error('Unable to load waveforms into channels.\n'
                            'One or more waveforms to load are missing on device memory.')
-            return self.get_loaded_assets()[0]
+            return self.get_loaded_assets()
 
         # Load waveforms into channels
         for chnl_num, waveform in load_dict.items():
@@ -401,7 +372,7 @@ class AWG7k(Base, PulserInterface):
                 time.sleep(0.1)
 
         self.set_mode('C')
-        return self.get_loaded_assets()[0]
+        return self.get_loaded_assets()
 
     def load_sequence(self, sequence_name):
         """ Loads a sequence to the channels of the device in order to be ready for playback.
@@ -424,14 +395,14 @@ class AWG7k(Base, PulserInterface):
         if sequence_name not in self.get_sequence_names():
             self.log.error('Unable to load sequence.\n'
                            'Sequence to load is missing on device memory.')
-            return self.get_loaded_assets()[0]
+            return self.get_loaded_assets()
 
         # set the AWG to the event jump mode:
         self.write('AWGC:EVENT:JMODE EJUMP')
         self.set_mode('S')
 
         self._loaded_sequences = [sequence_name]
-        return self.get_loaded_assets()[0]
+        return self.get_loaded_assets()
 
     def get_loaded_assets(self):
         """
@@ -1627,10 +1598,4 @@ class AWG7k(Base, PulserInterface):
         return has_error
 
     def _has_sequence_mode(self):
-        if self.model == 'AWG7052':
-            # the Tek AWG model 7052 does support sequencing even without the option '08'
-            # from measurement results it looks kind of "fast" too
-            # can be used for T1 and correlation spectroscopy
-            return True
-        else:
-            return '08' in self.installed_options
+        return '08' in self.installed_options

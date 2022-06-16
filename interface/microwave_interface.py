@@ -48,27 +48,25 @@ class MicrowaveMode(Enum):
 
 
 class MicrowaveInterface(metaclass=InterfaceMetaclass):
-    """This is the Interface class to define the controls for the simple microwave hardware.
-
-    This interface is designed to interface microwave generator where the power and frequency of the produced microwave
-    can be set. Is can be operated in CW (continuous wave) or as a sweep system synchronised with a measured device.
-
+    """This is the Interface class to define the controls for the simple
+    microwave hardware.
     """
 
     @abstract_interface_method
     def off(self):
-        """ Switches off any microwave output.
+        """
+        Switches off any microwave output.
+        Must return AFTER the device is actually stopped.
 
         @return int: error code (0:OK, -1:error)
-
-        Must return AFTER the device is actually stopped.
         """
         pass
 
     @abstract_interface_method
     def get_status(self):
-        """ Gets the current status of the MW source, i.e. the mode (cw, list or sweep) and
-            the output state (stopped, running)
+        """
+        Gets the current status of the MW source, i.e. the mode (cw, list or sweep) and
+        the output state (stopped, running)
 
         @return str, bool: mode ['cw', 'list', 'sweep'], is_running [True, False]
         """
@@ -76,7 +74,8 @@ class MicrowaveInterface(metaclass=InterfaceMetaclass):
 
     @abstract_interface_method
     def get_power(self):
-        """ Gets the microwave output power for the currently active mode.
+        """
+        Gets the microwave output power for the currently active mode.
 
         @return float: the output power in dBm
         """
@@ -84,32 +83,33 @@ class MicrowaveInterface(metaclass=InterfaceMetaclass):
 
     @abstract_interface_method
     def get_frequency(self):
-        """ Gets the frequency of the microwave output.
-
-        @return [float, list]: frequency(s) currently set for this device in Hz
-
+        """
+        Gets the frequency of the microwave output.
         Returns single float value if the device is in cw mode.
         Returns list like [start, stop, step] if the device is in sweep mode.
         Returns list of frequencies if the device is in list mode.
+
+        @return [float, list]: frequency(s) currently set for this device in Hz
         """
         pass
 
     @abstract_interface_method
     def cw_on(self):
-        """ Switches on cw microwave output.
+        """
+        Switches on cw microwave output.
+        Must return AFTER the device is actually running.
 
         @return int: error code (0:OK, -1:error)
-
-        Must return AFTER the device is actually running.
         """
         pass
 
     @abstract_interface_method
     def set_cw(self, frequency=None, power=None):
-        """ Configures the device for cw-mode and optionally sets frequency and/or power
+        """
+        Configures the device for cw-mode and optionally sets frequency and/or power
 
-        @param (float) frequency: frequency to set in Hz
-        @param (float) power: power to set in dBm
+        @param float frequency: frequency to set in Hz
+        @param float power: power to set in dBm
 
         @return tuple(float, float, str): with the relation
             current frequency in Hz,
@@ -120,28 +120,30 @@ class MicrowaveInterface(metaclass=InterfaceMetaclass):
 
     @abstract_interface_method
     def list_on(self):
-        """  Switches on the list mode microwave output.
+        """
+        Switches on the list mode microwave output.
+        Must return AFTER the device is actually running.
 
         @return int: error code (0:OK, -1:error)
-
-        Must return AFTER the device is actually running.
         """
         pass
 
     @abstract_interface_method
     def set_list(self, frequency=None, power=None):
-        """ Configures the device for list-mode and optionally sets frequencies and/or power
+        """
+        Configures the device for list-mode and optionally sets frequencies and/or power
 
-        @param (list(float)) frequency: list of frequencies in Hz
-        @param (float) power: MW power of the frequency list in dBm
+        @param list frequency: list of frequencies in Hz
+        @param float power: MW power of the frequency list in dBm
 
-        @return tuple(list, float, str): current frequencies in Hz, current power in dBm, current mode
+        @return list, float, str: current frequencies in Hz, current power in dBm, current mode
         """
         pass
 
     @abstract_interface_method
     def reset_listpos(self):
-        """ Reset of MW list mode position to start (first frequency step)
+        """
+        Reset of MW list mode position to start (first frequency step)
 
         @return int: error code (0:OK, -1:error)
         """
@@ -157,7 +159,9 @@ class MicrowaveInterface(metaclass=InterfaceMetaclass):
 
     @abstract_interface_method
     def set_sweep(self, start=None, stop=None, step=None, power=None):
-        """  Configures the device for sweep-mode and optionally sets frequency start/stop/step and/or power
+        """
+        Configures the device for sweep-mode and optionally sets frequency start/stop/step
+        and/or power
 
         @return float, float, float, float, str: current start frequency in Hz,
                                                  current stop frequency in Hz,
@@ -169,7 +173,8 @@ class MicrowaveInterface(metaclass=InterfaceMetaclass):
 
     @abstract_interface_method
     def reset_sweeppos(self):
-        """ Reset of MW sweep mode position to start (start frequency)
+        """
+        Reset of MW sweep mode position to start (start frequency)
 
         @return int: error code (0:OK, -1:error)
         """

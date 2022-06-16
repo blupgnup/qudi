@@ -32,7 +32,6 @@ from interface.pulser_interface import PulserConstraints
 from core.module import Base
 from core.configoption import ConfigOption
 from core.util.mutex import Mutex
-from core.util.network import netobtain
 
 
 class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
@@ -618,7 +617,6 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
         """
 
         # the function call expects nanoseconds as units
-        #print("Length : {} ns - Channels : {:b} - Inst data : {}".format(int(length*1e9), int(flags), inst_data))
         length = ctypes.c_double(length*1e9)
 
         self._lib.pb_inst_pbonly.argtype = [ctypes.c_int, ctypes.c_int,
@@ -717,7 +715,7 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
         for pulse in sequence_list[1:-1]:
             num = self._convert_pulse_to_inst(pulse['active_channels'],
                                               pulse['length'])
-            if num > 4094:# =(2**12 -2)
+            if num > 4094: # =(2**12 -2)
                 self.log.error('Error in PulseCreation: Command {0} exceeds '
                                'the maximal number of commands'.format(num))
 
@@ -729,13 +727,6 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
         # connect the end with the beginning of the pulse.
 
         bitmask = self._convert_to_bitmask(active_channels)
-
-        # For some old models, long delay is not an option so smart_pulse_creation is needed
-        # Let's cut the last pulse in two if it's too long.
-        if self._use_smart_pulse_creation and length > 256*self.GRAN_MIN:
-            self._convert_pulse_to_inst(active_channels, length-128*self.GRAN_MIN)
-            length = 128*self.GRAN_MIN
-        length = np.round(np.round(length / self.GRAN_MIN + 0.01) * self.GRAN_MIN, 12)
         # with the branch or the stop command
         if loop:
             num = self._write_pulse(flags=self.ON | bitmask,
@@ -1023,24 +1014,24 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
         # Let's treat the short pulses we created
         delta_time = 0
         for pulse in corrected_sequence:
-            if pulse['length'] == 0 or pulse['length'] < self.LEN_MIN/1e3:  # is zero with rounding error
+            if pulse['length'] == 0 or pulse['length'] < self.GRAN_MIN/1e3:  # is zero with rounding error
                 corrected_sequence.remove(pulse)
-            elif pulse['length'] < self.LEN_MIN/2:
+            elif pulse['length'] < self.GRAN_MIN/2:
                 corrected_sequence.remove(pulse)
                 self.log.info("Delay correction of the pulse blaster has created a pulse too short."
                               "The pulse is {0} ns with a minimum of {1} ns in th state {2}."
                                "Pulses shorter than half the minimum are dropped.".format(
-                    pulse['length']*1e9, self.LEN_MIN*1e9, pulse['active_channels']
+                    pulse['length']*1e9, self.GRAN_MIN*1e9, pulse['active_channels']
                 ))
                 delta_time -= pulse['length']
-            elif self.LEN_MIN/2 <= pulse['length'] < self.LEN_MIN:
+            elif self.GRAN_MIN/2 <= pulse['length'] < self.GRAN_MIN:
                 self.log.info("Delay correction of the pulse blaster has created a pulse too short."
                           "The pulse is {0} ns with a minimum of {1} ns in th state {2}."
                           "This pulse has been rounded to {1} ns.".format(
-                    pulse['length'] * 1e9, self.LEN_MIN * 1e9, pulse['active_channels']
+                    pulse['length'] * 1e9, self.GRAN_MIN * 1e9, pulse['active_channels']
                 ))
-                delta_time += self.LEN_MIN - pulse['length']
-                pulse['length'] = self.LEN_MIN
+                delta_time += self.GRAN_MIN - pulse['length']
+                pulse['length'] = self.GRAN_MIN
         if delta_time > 0:
             self.log.warning("Delay correction has induced an overtime of {0} ns. The total length is now"
                                 " {1} s. This may need to be accounted in the acquisition.".format(
@@ -1387,12 +1378,12 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
         else:
             self.log.error('Method load_waveform expects a list of waveform '
                            'names or a dict.')
-            return self.get_loaded_assets()[0]
+            return self.get_loaded_assets()
 
         if len(waveforms) != 1:
             self.log.error('PulseBlaster expects exactly one waveform name for '
                            'load_waveform.')
-            return self.get_loaded_assets()[0]
+            return self.get_loaded_assets()
 
         waveform = waveforms[0]
         if waveform != self._current_pb_waveform_name:
@@ -1400,7 +1391,7 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
                            'PulseBlaster.\n'
                            'Only one waveform at a time can be '
                            'held.'.format(waveform))
-            return self.get_loaded_assets()[0]
+            return self.get_loaded_assets()
 
         self.write_pulse_form(self._current_pb_waveform)
         self._currently_loaded_waveform = waveform
@@ -1483,7 +1474,7 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
                              of the pulse generator hardware.
         """
         num = self.get_status_bit()
-        if num in [0, 1, 2]:
+        if num in [1, 2]:
             state = 0
         else:
             state = 1
@@ -1670,11 +1661,16 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
         """
 
         if ch is None:
-            ch = list(self.channel_states.keys())
+            ch = []
 
         active_ch = {}
-        for channel in ch:
-            active_ch[channel] = channel in self._current_activation_config
+
+        if not ch:
+            active_ch = self.channel_states
+
+        else:
+            for channel in ch:
+                active_ch[channel] = self.channel_states[channel]
 
         return active_ch
 
@@ -1757,8 +1753,6 @@ class PulseBlasterESRPRO(Base, SwitchInterface, PulserInterface):
         waveform should be terminated.
 
         """
-        analog_samples = netobtain(analog_samples)
-        digital_samples = netobtain(digital_samples)
 
         #FIXME: Remove those, after debug process is finished.
         self._name = name

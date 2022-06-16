@@ -200,6 +200,7 @@ def _search_end_of_dip(self, direction, data, peak_arg, start_arg, end_arg, sigm
     elif direction == 'right':
         mult = +1
         sigma_arg=end_arg
+
     else:
         print('No valid direction in search end of peak')
     ii=0
@@ -541,3 +542,15 @@ def _check_1D_input(self, x_axis, data, params):
 
     return error
 
+def _find_peaks(self, x, y, npeaks, hold):
+    ymin = y.min()
+    xpeak = []
+    ypeak = []
+    for i in range(npeaks):
+        m = np.argmax(y)
+        ypeak.append(y[m])
+        xpeak.append(x[m])
+        a = max(0,m-hold)
+        b = min(m+hold+1, len(y)+1)
+        y[a:b] = ymin
+    return xpeak, ypeak 

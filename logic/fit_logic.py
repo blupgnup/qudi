@@ -428,14 +428,13 @@ class FitContainer(QtCore.QObject):
             'data': y_data,
             'units': self.units,
             'add_params': self.use_settings}
-
         result = None
 
         if self.current_fit in self.fit_list:
             result = self.fit_list[self.current_fit]['make_fit'](
                 estimator=self.fit_list[self.current_fit]['estimator'],
                 **kwargs)
-
+        
         elif self.current_fit == 'No Fit':
             fit_y = np.zeros(fit_x.shape)
 

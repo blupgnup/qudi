@@ -112,8 +112,8 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
         self.threadlock = Mutex()
 
         # the current wavelength read by the wavemeter in nm (vac)
-        self._current_wavelength = 0.0
-        self._current_wavelength2 = 0.0
+        self._current_wavelength = 1.0
+        self._current_wavelength2 = 1.0
 
 
     def on_activate(self):
@@ -241,7 +241,7 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
 
         return 0
 
-    def get_current_wavelength(self, kind="air"):
+    def get_current_wavelength(self, kind="vac"):
         """ This method returns the current wavelength.
 
         @param string kind: can either be "air" or "vac" for the wavelength in air or vacuum, respectively.
@@ -270,6 +270,15 @@ class HighFinesseWavemeter(Base,WavemeterInterface):
             # for vacuum just return the current wavelength
             return float(self._current_wavelength2)
         return -2.0
+
+    def get_current_frequency(self):
+        """ This method returns the current wavelength of the second input channel.
+
+        @param string kind: can either be "air" or "vac" for the wavelength in air or vacuum, respectively.
+
+        @return float: wavelength (or negative value for errors)
+        """
+        return float(299792458/self._current_wavelength)
 
     def get_timing(self):
         """ Get the timing of the internal measurement thread.

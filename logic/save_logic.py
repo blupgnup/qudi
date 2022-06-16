@@ -28,6 +28,10 @@ import numpy as np
 import os
 import sys
 import time
+import bz2
+import pickle
+import _pickle as cPickle
+
 
 from collections import OrderedDict
 from core.configoption import ConfigOption
@@ -412,7 +416,7 @@ class SaveLogic(GenericLogic):
 
         # determine proper unique filename to save if none has been passed
         if filename is None:
-            filename = timestamp.strftime('%Y%m%d-%H%M-%S' + '_' + filelabel + '.dat')
+            filename = timestamp.strftime('%Y%m%d-%H%M-%S' + '_' + filelabel)
 
         # Check format specifier.
         if not isinstance(fmt, str) and len(fmt) != len(data):
@@ -488,16 +492,19 @@ class SaveLogic(GenericLogic):
             else:
                 identifier_str = list(data)[0]
             header += list(data)[0]
-            self.save_array_as_text(data=data[identifier_str], filename=filename, filepath=filepath,
-                                    fmt=fmt, header=header, delimiter=delimiter, comments='#',
-                                    append=False)
+            self.save_array_as_text(data=data[identifier_str], filename=filename  + '.dat',
+                                    filepath=filepath,fmt=fmt, header=header, delimiter=delimiter, comments='#', append=False)
         # write npz file and save parameters in textfile
         elif filetype == 'npz':
             header += str(list(data.keys()))[1:-1]
-            np.savez_compressed(filepath + '/' + filename[:-4], **data)
-            self.save_array_as_text(data=[], filename=filename[:-4]+'_params.dat', filepath=filepath,
+            np.savez_compressed(filepath + '/' + filename, **data)
+            self.save_array_as_text(data=[], filename=filename+'_params.dat', filepath=filepath,
                                     fmt=fmt, header=header, delimiter=delimiter, comments='#',
                                     append=False)
+        elif filetype is 'p':
+            export = {**data, **parameters}
+            self.save_array_as_pickle(data=export, filename=filename, filepath=filepath)
+        
         else:
             self.log.error('Only saving of data as textfile and npz-file is implemented. Filetype "{0}" is not '
                            'supported yet. Saving as textfile.'.format(filetype))
@@ -510,11 +517,11 @@ class SaveLogic(GenericLogic):
         if plotfig is not None:
             # create Metadata
             metadata = dict()
-            metadata['Title'] = 'Image produced by qudi: ' + module_name
-            metadata['Author'] = 'qudi - Software Suite'
-            metadata['Subject'] = 'Find more information on: https://github.com/Ulm-IQO/qudi'
-            metadata['Keywords'] = 'Python 3, Qt, experiment control, automation, measurement, software, framework, modular'
-            metadata['Producer'] = 'qudi - Software Suite'
+            metadata['Title'] = 'Cavity Transmission'
+            metadata['Author'] = 'Torben Pöpplau'
+            metadata['Subject'] = 'Cavity Finesse Measurement'
+            metadata['Keywords'] = 'ring cavity, high finesse'
+            metadata['Producer'] = 'Torben Pöpplau'
             if timestamp is not None:
                 metadata['CreationDate'] = timestamp
                 metadata['ModDate'] = timestamp
@@ -565,7 +572,11 @@ class SaveLogic(GenericLogic):
             plt.close(plotfig)
             self.log.debug('Time needed to save data: {0:.2f}s'.format(time.time()-start_time))
             #----------------------------------------------------------------------------------
-
+        
+    def save_array_as_pickle(self, data, filename, filepath=''):
+        with open(os.path.join(filepath, filename + '.p'), 'wb') as fp:
+            pickle.dump(data, fp)
+    
     def save_array_as_text(self, data, filename, filepath='', fmt='%.15e', header='',
                            delimiter='\t', comments='#', append=False):
         """

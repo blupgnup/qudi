@@ -28,6 +28,10 @@ from lmfit import Parameters
 from lmfit.models import Model
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
+
+
+from scipy.signal import find_peaks
 from scipy.ndimage import filters
 from scipy.interpolate import InterpolatedUnivariateSpline
 
@@ -298,7 +302,6 @@ def make_lorentzian_fit(self, x_axis, data, estimator, units=None,
                           initial fitting values, best fitting values, data
                           with best fit with given axis,...
     """
-
     model, params = self.make_lorentzian_model()
 
     error, params = estimator(x_axis, data, params)
@@ -331,7 +334,6 @@ def make_lorentzian_fit(self, x_axis, data, estimator, units=None,
                                'unit': units[0]}
 
     result_str_dict['chi_sqr'] = {'value': result.chisqr, 'unit': ''}
-
     result.result_str_dict = result_str_dict
     return result
 
@@ -805,6 +807,12 @@ def make_lorentziantriple_fit(self, x_axis, data, estimator, units=None,
                                      'error': result.params['l2_center'].stderr,
                                      'unit': units[0]}
 
+    result_str_dict['Splitting left'] = {'value': (result.params['l1_center'].value - result.params['l0_center'].value),
+                                      'unit': units[0]}
+
+    result_str_dict['Splitting right'] = {'value': ((result.params['l2_center'].value - result.params['l1_center'].value)),
+                                      'unit': units[0]}
+
     result_str_dict['Contrast 0'] = {'value': abs(result.params['l0_contrast'].value),
                                      'error': result.params['l0_contrast'].stderr,
                                      'unit': '%'}
@@ -817,16 +825,16 @@ def make_lorentziantriple_fit(self, x_axis, data, estimator, units=None,
                                      'error': result.params['l2_contrast'].stderr,
                                      'unit': '%'}
 
-    result_str_dict['FWHM 0'] = {'value': result.params['l0_sigma'].value,
-                                 'error': result.params['l0_sigma'].stderr,
+    result_str_dict['FWHM 0'] = {'value': result.params['l0_fwhm'].value,
+                                 'error': result.params['l0_fwhm'].stderr,
                                  'unit': units[0]}
 
-    result_str_dict['FWHM 1'] = {'value': result.params['l1_sigma'].value,
-                                 'error': result.params['l1_sigma'].stderr,
+    result_str_dict['FWHM 1'] = {'value': result.params['l1_fwhm'].value,
+                                 'error': result.params['l1_fwhm'].stderr,
                                  'unit': units[0]}
 
-    result_str_dict['FWHM 2'] = {'value': result.params['l2_sigma'].value,
-                                 'error': result.params['l2_sigma'].stderr,
+    result_str_dict['FWHM 2'] = {'value': result.params['l2_fwhm'].value,
+                                 'error': result.params['l2_fwhm'].stderr,
                                  'unit': units[0]}
 
     result_str_dict['chi_sqr'] = {'value': result.chisqr, 'unit': ''}
@@ -954,5 +962,235 @@ def estimate_lorentziantriple_N14(self, x_axis, data, params):
     params['l2_sigma'].set(value=sigma, min=minimal_linewidth,
                            max=maximal_linewidth, expr='l0_sigma')
     params['offset'].set(value=offset)
+
+    return error, params
+
+def estimate_lorentziantriple_dip(self, x_axis, data, params,
+                                  threshold_fraction=0.3,
+                                  minimal_threshold=0.01,
+                                  sigma_threshold_fraction=0.3):
+    """ Provide an estimator for triple lorentzian dip with offset.
+
+    @param numpy.array x_axis: 1D axis values
+    @param numpy.array data: 1D data, should have the same dimension as x_axis.
+    @param lmfit.Parameters params: object includes parameter dictionary which
+                                    can be set
+
+    @return tuple (error, params):
+
+    Explanation of the return parameter:
+        int error: error code (0:OK, -1:error)
+        Parameters object params: set parameters of initial values
+    """
+
+    error = self._check_1D_input(x_axis=x_axis, data=data, params=params)
+
+    # smooth with gaussian filter and find offset:
+    data_smooth, offset = self.find_offset_parameter(x_axis, data)
+
+    # level data:
+    data_level = data_smooth - offset
+
+    # search for triple lorentzian dip:
+    ret_val = self._search_double_dip(x_axis, data_level, threshold_fraction,
+                                      minimal_threshold,
+                                      sigma_threshold_fraction)
+
+    error = ret_val[0]
+    sigma0_argleft, dip0_arg, sigma0_argright = ret_val[1:4]
+    sigma1_argleft, dip1_arg, sigma1_argright = ret_val[4:7]
+
+    #if dip0_arg == dip1_arg:
+    lorentz1_amplitude = data_level[dip0_arg] / 2.
+    lorentz0_amplitude = lorentz1_amplitude/5
+    lorentz2_amplitude = lorentz1_amplitude/5
+    #else:
+    #    lorentz0_amplitude = data_level[dip0_arg]
+    #    lorentz1_amplitude = data_level[dip1_arg]
+    #    lorentz2_amplitude = data_level[dip0_arg]
+
+    lorentz0_center = x_axis[dip0_arg]
+    lorentz1_center = x_axis[dip1_arg]
+    lorentz2_center = x_axis[dip0_arg]
+
+    # Both sigmas are set to the same value
+    # numerical_integral_0 = (np.sum(data_level[sigma0_argleft:sigma0_argright]) *
+    #                    (x_axis[sigma0_argright] - x_axis[sigma0_argleft]) /
+    #                     len(data_level[sigma0_argleft:sigma0_argright]))
+
+    smoothing_spline = 1    # must be 1<= smoothing_spline <= 5
+    fit_function = InterpolatedUnivariateSpline(x_axis, data_level,
+                                            k=smoothing_spline)
+    numerical_integral_0 = fit_function.integral(x_axis[sigma0_argleft],
+                                             x_axis[sigma0_argright])
+
+    lorentz0_sigma = abs(numerical_integral_0 / (np.pi * lorentz0_amplitude))
+
+    numerical_integral_1 = numerical_integral_0
+
+    lorentz1_sigma = abs(numerical_integral_1 / (np.pi * lorentz1_amplitude))
+
+    numerical_integral_2 = numerical_integral_0
+
+    lorentz2_sigma = abs(numerical_integral_2 / (np.pi * lorentz2_amplitude))
+    # esstimate amplitude
+    # lorentz0_amplitude = -1*abs(lorentz0_amplitude*np.pi*lorentz0_sigma)
+    # lorentz1_amplitude = -1*abs(lorentz1_amplitude*np.pi*lorentz1_sigma)
+
+    stepsize = x_axis[1] - x_axis[0]
+    full_width = x_axis[-1] - x_axis[0]
+    n_steps = len(x_axis)
+
+    if lorentz0_center < lorentz1_center:
+        params['l0_amplitude'].set(value=lorentz0_amplitude, max=-0.01)
+        params['l0_sigma'].set(value=lorentz0_sigma, min=stepsize / 2,
+                               max=full_width * 4)
+        params['l0_center'].set(value=lorentz0_center,
+                                min=(x_axis[0]) - n_steps * stepsize,
+                                max=(x_axis[-1]) + n_steps * stepsize)
+        params['l1_amplitude'].set(value=lorentz1_amplitude, max=-0.01)
+        params['l1_sigma'].set(value=lorentz1_sigma, min=stepsize / 2,
+                               max=full_width * 4)
+        params['l1_center'].set(value=lorentz1_center,
+                                min=(x_axis[0]) - n_steps * stepsize,
+                                max=(x_axis[-1]) + n_steps * stepsize)
+        params['l2_amplitude'].set(value=lorentz2_amplitude, max=-0.01)
+        params['l2_sigma'].set(value=lorentz2_sigma, min=stepsize / 2,
+                               max=full_width * 4)
+        params['l2_center'].set(value=lorentz2_center,
+                                min=(x_axis[0]) - n_steps * stepsize,
+                                max=(x_axis[-1]) + n_steps * stepsize)
+    else:
+        params['l0_amplitude'].set(value=lorentz1_amplitude, max=-0.01)
+        params['l0_sigma'].set(value=lorentz1_sigma, min=stepsize / 2,
+                               max=full_width * 4)
+        params['l0_center'].set(value=lorentz1_center,
+                                min=(x_axis[0]) - n_steps * stepsize,
+                                max=(x_axis[-1]) + n_steps * stepsize)
+        params['l1_amplitude'].set(value=lorentz0_amplitude, max=-0.01)
+        params['l1_sigma'].set(value=lorentz0_sigma, min=stepsize / 2,
+                               max=full_width * 4)
+        params['l1_center'].set(value=lorentz0_center,
+                                min=(x_axis[0]) - n_steps * stepsize,
+                                max=(x_axis[-1]) + n_steps * stepsize)
+        params['l2_amplitude'].set(value=lorentz0_amplitude, max=-0.01)
+        params['l2_sigma'].set(value=lorentz0_sigma, min=stepsize / 2,
+                               max=full_width * 4)
+        params['l2_center'].set(value=lorentz0_center,
+                                min=(x_axis[0]) - n_steps * stepsize,
+                                max=(x_axis[-1]) + n_steps * stepsize)
+
+    params['offset'].set(value=offset)
+
+    return error, params
+
+def estimate_lorentziantriple_sidebands(self, x_axis, data, params,
+                                        threshold_fraction=0.3,
+                                        minimal_threshold=0.01,
+                                        sigma_threshold_fraction=0.3):
+    
+    
+
+    error = self._check_1D_input(x_axis=x_axis, data=data, params=params)
+    data_smooth, offset = self.find_offset_parameter(x_axis, data)
+    data_level = data_smooth - data
+    amplitude = data_level.max()
+    
+    xpeak, ypeak = self._find_peaks(x_axis, data - offset, 3, 2000)
+    xpeak, ypeak = zip(*sorted(zip(xpeak, ypeak)))
+    params_single = Parameters()
+    params_single.add(name='amplitude', value=amplitude)
+    params_single.add(name='sigma', value=np.inf)
+    params_single.add(name='center', value=np.inf)
+    params_single.add(name='offset', value=offset)
+    error, result = self.estimate_lorentzian_peak(x_axis, data_smooth, params_single)
+    
+    sigma = result['sigma'].value
+    center = result['center'].value
+    amplitude = result['amplitude'].value
+
+    params['l1_center'].set(value=center)
+    params['l0_center'].set(value=xpeak[0])
+    params['l2_center'].set(value=xpeak[2])
+    params['l1_amplitude'].set(value=amplitude, min=1e-6)
+    params['l0_amplitude'].set(value=ypeak[0], min=1e-6)
+    params['l2_amplitude'].set(value=ypeak[2], min=1e-6)
+    params['l0_sigma'].set(value=sigma, min=1e-12)
+    params['l1_sigma'].set(value=2*sigma, min=1e-12)
+    params['l2_sigma'].set(value=2*sigma, min=1e-12)
+    params['offset'].set(value=offset)
+
+    '''
+    # do single Lorentzian fit
+    params_single = Parameters()
+    params_single.add(name='amplitude', value=amplitude)
+    params_single.add(name='sigma', value=np.inf)
+    params_single.add(name='center', value=np.inf)
+    params_single.add(name='offset', value=offset)
+    error, result = self.estimate_lorentzian_peak(x_axis, data_smooth, params_single)
+    #result = self.make_lorentzian_fit(x_axis, data_smooth, self.estimate_lorentzian_peak, add_params=params_rect) 
+
+    # do triple fit
+    sigma = result['sigma'].value
+    center = result['center'].value
+    amplitude = result['amplitude'].value
+
+    params['l1_center'].set(value=center)
+    params['l0_center'].set(value=center-50*sigma)
+    params['l2_center'].set(value=center+50*sigma)
+    params['l1_amplitude'].set(value=amplitude, min=1e-6)
+    params['l0_amplitude'].set(value=amplitude/6, min=1e-6)
+    params['l2_amplitude'].set(value=amplitude/6, min=1e-6)
+    params['l0_sigma'].set(value=sigma, min=1e-12)
+    params['l1_sigma'].set(value=sigma, min=1e-12)
+    params['l2_sigma'].set(value=sigma, min=1e-12)
+    params['offset'].set(value=offset)
+    '''
+    return error, params
+
+def estimate_lorentziantriple_peak(self, x_axis, data, params,
+                                   threshold_fraction=0.3,
+                                   minimal_threshold=0.01,
+                                   sigma_threshold_fraction=0.3):
+    """ Provide an estimator for triple lorentzian peak with offset.
+
+    @param numpy.array x_axis: 1D axis values
+    @param numpy.array data: 1D data, should have the same dimension as x_axis.
+    @param lmfit.Parameters params: object includes parameter dictionary which
+                                    can be set
+
+    @return tuple (error, params):
+
+    Explanation of the return parameter:
+        int error: error code (0:OK, -1:error)
+        Parameters object params: set parameters of initial values
+    """
+    # check if parameters make sense
+    error = self._check_1D_input(x_axis=x_axis, data=data, params=params)
+
+    # the peak and dip lorentzians have the same parameters:
+    params_dip = params
+    data_negative = data * (-1)
+
+    error, params_ret = self.estimate_lorentziantriple_dip(x_axis,
+                                                           data_negative,
+                                                           params_dip)
+
+    params['l0_sigma'] = params_ret['l0_sigma']
+    # set the maximum to infinity, since that is the default value.
+    params['l0_amplitude'].set(value=-params_ret['l0_amplitude'].value, min=-1e-12,
+                               max=np.inf)
+    params['l0_center'] = params_ret['l0_center']
+    params['l1_amplitude'].set(value=-params_ret['l1_amplitude'].value, min=-1e-12,
+                               max=np.inf)
+    params['l1_sigma'] = params_ret['l1_sigma']
+    params['l1_center'] = params_ret['l1_center']
+
+    params['l2_amplitude'].set(value=-params_ret['l2_amplitude'].value, min=-1e-12,
+                               max=np.inf)
+    params['l2_sigma'] = params_ret['l2_sigma']
+    params['l2_center'] = params_ret['l2_center']
+
+    params['offset'].set(value=-params_ret['offset'])
 
     return error, params

@@ -31,7 +31,6 @@ from collections import OrderedDict
 from logic.pulsed.sampling_functions import SamplingFunctions
 from core.util.modules import get_main_dir
 from core.util.helpers import natural_sort
-from enum import Enum
 
 
 class PulseBlockElement(object):
@@ -96,7 +95,7 @@ class PulseBlockElement(object):
 
     def __str__(self):
         pulse_func_dict = {chnl: type(func).__name__ for chnl, func in self.pulse_function.items()}
-        return_str = 'PulseBlockElement\n\tinitial length: {0}s\n\tlength increment: {1}s\n\tlaser_on : {2},' \
+        return_str = 'PulseBlockElement\n\tinitial length: {0}s\n\tlength increment: {1}s\n\tlaser_on : {2],' \
                      'analog channels: {3}\n\tdigital channels: {4}'.format(self.init_length_s,
                                                                             self.increment_s,
                                                                             self.laser_on,
@@ -1100,51 +1099,6 @@ class PredefinedGeneratorBase:
     ################################################################################################
     #                                   Helper methods                                          ####
     ################################################################################################
-
-    def tau_2_pulse_spacing(self, t, inverse=False,
-                           custom_func=[None, None], **custom_kwwargs):
-        """
-        Converts tau to the physical pulse spacing between (microwave) pulses.
-        By definition, tau = 1/f where f is the filter frequency of a dynamical decoupling
-        experiment. For many cases this tau equals the time between the center of
-        consecutive pi pulses.
-        Thus, the default behavior is to subtract the duration of a pi pulse from tau.
-
-        :param t: tau (or tau_pulse_spacing, if inverse==True) to be converted.
-        :param bool inverse: do the inverse transformation tau -> tau_pulse_spacing
-        :param [func, inv_func] custom_func: provide function pointers for custom transformations
-        :param custom_kwwargs: kwargs to the custom transformation functions
-        :return:
-        """
-
-        def subtract_pi(t, **kwargs):
-            return t - np.asarray(self.rabi_period) / 2
-
-        def add_pi(t, **kwargs):
-            return t + np.asarray(self.rabi_period) / 2
-
-        def check_sanity(tau, t_phys):
-            t_phys = np.asarray(t_phys)
-            tau = np.asarray(tau)
-            if np.any(t_phys < 0):
-                self.log.warning("Adjusting negative physical pulse spacing to 0. Affected tau: {} "
-                                 .format(tau[t_phys < 0]))
-                t_phys[t_phys < 0] = 0
-
-            return t_phys
-
-        func = subtract_pi
-        func_inverse = add_pi
-
-        if custom_func[0] is not None:
-            func = custom_func[0]
-        if custom_func[1] is not None:
-            func_inverse = custom_func[1]
-
-        if inverse:
-            return func_inverse(t, **custom_kwwargs)
-        return check_sanity(t, func(t, **custom_kwwargs))
-
     def _get_idle_element(self, length, increment):
         """
         Creates an idle pulse PulseBlockElement
@@ -1355,70 +1309,6 @@ class PredefinedGeneratorBase:
         mw_laser_element.laser_on = True
         return mw_laser_element
 
-    def _get_mw_element_linearchirp(self, length, increment, amplitude=None, start_freq=None, stop_freq=None, phase=None):
-        """
-        Creates a MW pulse PulseBlockElement
-
-        @param float length: MW pulse duration in seconds
-        @param float increment: MW pulse duration increment in seconds
-        @param float start_freq: start MW frequency in case of analogue MW channel in Hz
-        @param float stop_freq: stop MW frequency in case of analogue MW channel in Hz
-        @param float amp: MW amplitude in case of analogue MW channel in V
-        @param float phase: MW phase in case of analogue MW channel in deg
-
-        @return: PulseBlockElement, the generated MW element
-        """
-        if self.microwave_channel.startswith('d'):
-            mw_element = self._get_trigger_element(
-                length=length,
-                increment=increment,
-                channels=self.microwave_channel)
-            self.log.warning('You are trying to create chirped pulses on a digital channel.')
-        else:
-            mw_element = self._get_idle_element(
-                length=length,
-                increment=increment)
-
-            sampling_function_name = 'Chirp'
-            kwargs = {'amplitude': amplitude, 'start_freq': start_freq, 'stop_freq': stop_freq, 'phase': phase}
-
-            mw_element.pulse_function[self.microwave_channel] = \
-                getattr(SamplingFunctions, sampling_function_name)(**kwargs)
-        return mw_element
-
-    def _get_mw_element_AEchirp(self, length, increment, amp=None, start_freq=None, stop_freq=None, phase=None,
-                                truncation_ratio=0.1):
-        """
-        Creates a MW pulse PulseBlockElement
-
-        @param float length: MW pulse duration in seconds
-        @param float increment: MW pulse duration increment in seconds
-        @param float start_freq: start MW frequency in case of analogue MW channel in Hz
-        @param float stop_freq: stop MW frequency in case of analogue MW channel in Hz
-        @param float amp: MW amplitude in case of analogue MW channel in V
-        @param float phase: MW phase in case of analogue MW channel in deg
-
-        @return: PulseBlockElement, the generated MW element
-        """
-        if self.microwave_channel.startswith('d'):
-            mw_element = self._get_trigger_element(
-                length=length,
-                increment=increment,
-                channels=self.microwave_channel)
-            self.log.warning('You are trying to create chirped pulses on a digital channel.')
-        else:
-            mw_element = self._get_idle_element(
-                length=length,
-                increment=increment)
-
-            sampling_function_name = 'AllenEberlyChirp'
-            kwargs = {'amplitude': amp, 'start_freq': start_freq, 'stop_freq': stop_freq, 'phase': phase,
-                      'tau_pulse': truncation_ratio * length}
-
-            mw_element.pulse_function[self.microwave_channel] = \
-                getattr(SamplingFunctions, sampling_function_name)(**kwargs)
-        return mw_element
-
     def _get_readout_element(self):
 
         waiting_element = self._get_idle_element(length=self.wait_time, increment=0)
@@ -1614,4 +1504,3 @@ class PulseObjectGenerator(PredefinedGeneratorBase):
         if inspect.isclass(obj):
             return PredefinedGeneratorBase in obj.__bases__ and len(obj.__bases__) == 1
         return False
-
