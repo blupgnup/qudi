@@ -58,7 +58,7 @@ class HardwarePull(QtCore.QObject):
         # update as long as the state is busy
         if self._parentclass.module_state() == 'running':
             trace = self._parentclass._rte.query_binary_values('FORM REAL,32;:CHAN{}:DATA?'.format(self.channel),
-                                                               datatype='f', is_big_endian=False)
+                                                               datatype='f', is_big_endian=True)
             # send the data to the parent via a signal
             self.sig_trace.emit(trace)
 
@@ -126,7 +126,7 @@ class RohdeSchwarz(Base, OscilloscopeInterface):
 
     def getData_cont(self, channel):
         trace = self._rte.query_binary_values('FORM REAL,32;:CHAN{}:DATA?'.format(channel),
-                                              datatype='f', is_big_endian=False)
+                                              datatype='f', is_big_endian=True)
         self._current_trace = trace
         return self._current_trace
 
@@ -158,7 +158,7 @@ class RohdeSchwarz(Base, OscilloscopeInterface):
     def RunSingle(self, channel=1):
         #self._rte.write('RUNSingle')
         trace = self._rte.query_binary_values('FORM REAL,32;:CHAN{}:DATA?'.format(channel),
-                                              datatype='f', is_big_endian=False)
+                                              datatype='f', is_big_endian=True)
         return trace    
 
     def RunSTOP(self):
